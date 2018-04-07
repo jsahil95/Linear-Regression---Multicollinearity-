@@ -1,0 +1,197 @@
+---
+title: "Lab5"
+author: "Sahil Jain"
+date: "November 18, 2017"
+output: html_document
+---
+
+LAB-5 Computational Part 
+
+Interest lies in developing a model that relates a player’s annual salary to their previous
+performance. Your job in this Lab is to investigate several such models. Where computation is required, you must perform the calculations in both R and Python (unless otherwise indicated).
+
+First we will import the data in R
+
+Loading library
+```{r}
+library(car)
+library(ISLR)
+library(leaps)
+library(MASS)
+library(boot)
+```
+
+```{r}
+hitters <- read.csv("/Users/sahiljain/Downloads/hitters.csv")
+```
+
+(A) Calculate the VIF for each of the explanatory variables. Comment on weather multicollinearity appears to be an isse. If it is, identify the three explanatory variables that are most seriously affected by the issue. 
+
+First we will do a MLR of the data, then calculate the VIF. 
+```{r}
+model <- lm(Salary ~ ., data = hitters)
+summary(model)
+```
+VIF
+```{r}
+vif(model)
+```
+
+Yes, multicolinearity does appear to be an issue here as some of the variables are seriously affected. Most seriously affected variables are :
+(1) CAtBat 
+(2) CHits 
+(3) CRuns
+
+(B) Using the all-possible-subsets approach, find the model that best fits the observed data. This procedure may be automated using the regsubsets() function in R, but you must explain in your own words how this algorithm identifies the ‘best’ model. Note that you do not need to perform this task in Python.
+
+```{r}
+bestModel <- regsubsets(hitters$Salary ~ ., data = hitters, nvmax = 19)
+best_summ <- summary(bestModel)
+best_summ
+```
+regsubsets works by looking at the p-value, AIC, R^2 and adjusted R^2 of an explanatory variables. It performs best predictor subset selection by identifying the best model that contains a given number of predictors, where best is quantified using RSS.
+
+Finding the optimal number of explanatory variables
+```{r}
+max_var <- which.max(best_summ$adjr2)
+max_var
+```
+
+(C) Using the forward-stepwise-selection approach, find the model that best fits the observed data. This procedure may be automated using the stepAIC() function in R, but you must explain in your own words how this algorithm identifies the ‘best’ model. Note that you do not need to perform this task in Python.
+
+```{r}
+sml <- lm(Salary ~ 1, data = hitters)
+lrg <- lm(Salary ~ ., data = hitters)
+```
+
+```{r}
+stepAIC(object = sml, scope = list(upper = lrg, lower = sml), direction = "forward")
+reg.fwd <- stepAIC(object = sml, scope = list(upper = lrg, lower = sml), direction = "forward", trace = 0)
+```
+Forward Stepwise regression selects a model by automatically adding or removing individual predictors, a step at a time, based on their statistical significance. The end result of this process is a single regression model with best explanatory variables, which makes it nice and simple.
+
+(D) Using the backward-stepwise-selection approach, find the model that best fits the observed data. This procedure may be automated using the stepAIC() function in R, but you must explain in your own words how this algorithm identifies the ‘best’ model. Note that you do not need to perform this task in Python.
+
+```{r}
+stepAIC(object = lrg, scope = list(upper = lrg, lower = sml), direction = "backward")
+reg.back <- stepAIC(object = lrg, scope = list(upper = lrg, lower = sml), direction = "backward", trace = 0)
+```
+Backward stepwise selection involves starting off in a backward approach and then potentially adding back variables if they appear to be significant. The process is between choosing the least significant variable to drop and then adding all dropped variables except the most recently dropped from the model. This means that two separate significance levels must be chosen for deletion from the model and for adding to the model. 
+
+(E) Using the hybrid-stepwise-selection approach, find the model that best fits the observed data. This procedure may be automated using the stepAIC() function in R, but you must explain in your own words how this algorithm identifies the ‘best’ model. Note that you do not need to perform this task in Python.
+
+```{r}
+stepAIC(object = sml, scope = list(upper = lrg, lower = sml), direction = "both")
+reg.hybrid <- stepAIC(object = sml, scope = list(upper = lrg, lower = sml), direction = "both", trace = 0)
+```
+Hybrid Methods follows the forward stepwise approach, however, after adding each new variable, the method may also remove any variables that do not contribute to the model fit.
+
+(F) In this part you will compare the predictive performance of four models:
+
+(i) The full model with all 19 explanatory variables.
+(ii) The optimal model identified in part (b).
+(iii) The best model from parts (c)-(e) (i.e., the best stepwise-selection model).
+(iv) The model that is considered optimal with respect to the Bayesian Information Criterion (BIC) which contains the variables AtBat, Hits, Walks, CRBI, Division and PutOuts.
+
+Randomly split the observed data into a training set (containing roughly 80% of all of the data) and a held-out test set (containing roughly 20% of all of the data).
+Calculate the predictive root-mean-square error (RMSE) for each of the four models. Which model appears to be most appropriate? Justify why this model is most appropriate.
+
+Splitting the data into training and test set
+
+```{r}
+n <- dim(hitters)[1]
+trn <- sample(x = c(rep(TRUE, round(0.8*n)), rep(FALSE, n-round(0.8*n))), size = n, replace = FALSE)
+train <- hitters[trn,]
+tst <- !trn 
+test <- hitters[tst,]
+```
+
+(i) The full model with all 19 explanatory variables.
+
+```{r}
+model1 <- lm(Salary ~., data = train)
+pred1 <- predict(object = model1, newdata = test)
+RMSE1 <- sqrt(mean((test$Salary - pred1)^2))
+RMSE1
+```
+
+(ii) The optimal model identified in part (b).
+
+bestModel <- regsubsets(hitters$Salary ~ ., data = hitters)
+
+```{r}
+model2 <- lm(Salary ~ AtBat + Hits + Walks + CAtBat + CRuns + CRBI + CWalks + League + Division + PutOuts + Assists, data = train)
+pred2 <- predict(object = model2, newdata = test)
+RMSE2 <- sqrt(mean((test$Salary - pred2)^2))
+RMSE2
+```
+
+(iii) The best model from parts (c)-(e) (i.e., the best stepwise-selection model).
+
+Since all of the models gave same explanatory variables so I used forward stepwise selection
+```{r}
+model3 <- lm(Salary ~ CRBI + Hits + PutOuts + Division + AtBat +  Walks + CWalks + CRuns + CAtBat + Assists, data = train)
+pred3 <- predict(object = model3, newdata = test)
+RMSE3 <- sqrt(mean((test$Salary - pred3)^2))
+RMSE3
+```
+
+(iv) The model that is considered optimal with respect to the Bayesian Information Criterion (BIC) which contains the variables AtBat, Hits, Walks, CRBI, Division and PutOuts
+
+```{r}
+model4 <- lm(Salary ~ AtBat + Hits + Walks + CRBI + Division + PutOuts, data = train)
+pred4 <- predict(object = model4, newdata = test)
+RMSE4 <- sqrt(mean((test$Salary - pred4)^2))
+RMSE4
+```
+
+The second model (the best optimal model) is the better one beacuse of the RMSE value. Smaller the value better are the theoretical and statistical claims we can make about our model. Also the answer and best model should change every time since training set will be different everytime. 
+
+(G) As in part (f), you must compare the predictive performance of the same four models, but here you must determine the predictive accuracy (predictive RMSE) by using 10-Fold Cross Validation. Which model appears to be most appropriate? Justify why this model is most appropriate.
+
+(i) All Explanatory variables
+```{r}
+model5 <- glm(Salary ~. , data = hitters)
+RMSE5 <- sqrt((cv.glm(hitters, model5, K = 10)$delta)[1])
+RMSE5
+```
+
+(ii) Optimal Model 
+```{r}
+model6 <- glm(Salary ~ AtBat + Hits + Walks + CAtBat + CRuns + CRBI + CWalks + League + Division + PutOuts + Assists, data = hitters)
+RMSE6 <- sqrt((cv.glm(hitters, model6, K = 10)$delta)[1])
+RMSE6
+```
+
+(iii) Best step-wise selection model
+```{r}
+model7 <- glm(Salary ~ AtBat + Hits + Walks + CAtBat + CRuns + CRBI + CWalks + League + Division + PutOuts + Assists, data = hitters)
+RMSE7 <- sqrt((cv.glm(hitters, model7, K = 10)$delta)[1])
+RMSE7
+```
+
+(iv) Bayesian information Criterian model
+
+```{r}
+model8 <- glm(Salary ~ AtBat + Hits + Walks + CRBI + Division + PutOuts, data = hitters)
+RMSE8 <- sqrt((cv.glm(hitters, model8, K = 10)$delta)[1])
+RMSE8
+```
+
+After doing K-Folds Cross validation of 10 folds, we can determine that stepwise selection model appears to be the most appropriate model, because of the root mean square error value since smaller the RMSE better will the predictive accuracy of the model. 
+
+(H) Given the estimates of predictive accuracy from parts (f) and (g) indicate which estimates you believe to be more accurate. In other words, indicate which
+validation approach (i.e., cross validation vs. k-fold cross validation) you believe will most accurately estimate the predictive capability of a model. Briefly explain
+your rationale.
+
+K-fold cross validation is the much better approach as compared to cross validation because if we are proceeding with normal validation, we are reducing the dataset size by almost around 20–30%. However, In case of k-fold cross validation there won't be any such kind of reduction in dataset size moreover by doing k-fold cross validation we can prevent over fitting.
+
+(G) Accounting for all of the analyses you’ve performed (i.e., multicollinearity, goodness-of-fit, and predictive accuracy), which model would you be most comfortable using? Briefly justify your choice. [Note: I’m not looking for a right or wrong answer here; I want to see that you can sensibly and eloquently justify your choice].
+
+I will prefer predictive accuracy model because in predictive accuracy one can easily do different regression (step-wise) and different validations (cross, K-fold) to understand the result in a better way. Also in predictive accuracy most of the statistical insignificant variables are dropped out of the model which makes prediction even more easier. 
+
+
+
+
+
+
